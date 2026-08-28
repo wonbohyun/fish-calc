@@ -224,8 +224,14 @@ function decodeState(str){
   try{
     var j=atob(String(str).replace(/-/g,'+').replace(/_/g,'/'));
     var a=JSON.parse(j);
-    if(!a||a.length<5||!a[4]||a[4].length!==4) return null;
-    return {m:a[0],c:a[1],s:a[2],p:a[3],q:a[4]};
+    if(!a||a.length<5) return null;
+    var m=a[0],pp=a[3],q=a[4];
+    if(!m||m.length!==5||!pp||pp.length!==4||!q||q.length!==4) return null;
+    for(var d=0;d<4;d++){
+      if(!q[d]||q[d].length!==4) return null;
+      for(var b=0;b<4;b++){ if(!q[d][b]||q[d][b].length!==5) return null; }
+    }
+    return {m:m,c:a[1],s:a[2],p:pp,q:q};
   }catch(e){ return null; }
 }
 /* ==CALC-END== */
@@ -248,7 +254,7 @@ function persist(){
   try{ localStorage.setItem('hwal-state',JSON.stringify(state)); }catch(e){}
   var p=new URLSearchParams();
   p.set('d',encodeState(state));
-  history.replaceState(null,'','#'+p.toString());
+  try{ history.replaceState(null,'','#'+p.toString()); }catch(e){}
 }
 
 function shareUrl(){
@@ -470,6 +476,9 @@ function showReduce(d){
     }
     html+='<div class="reduce-actions"><button type="button" class="primary reduce-apply" data-d="'+d+'">적용</button>'+
       '<button type="button" class="reduce-cancel" data-d="'+d+'">취소</button></div>';
+  }
+  if(plan.type!=='ok'){
+    html+='<div class="reduce-actions"><button type="button" class="reduce-cancel" data-d="'+d+'">닫기</button></div>';
   }
   box.innerHTML=html;
   box.classList.add('show');
