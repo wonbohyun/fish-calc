@@ -35,7 +35,6 @@ input:disabled{opacity:.6;background:transparent}
 header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
 header h1{font-size:1.25rem}
 .hbtns{display:flex;gap:8px;flex-wrap:wrap}
-#viewBanner{display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--yellow-bg);border:1px solid var(--yellow-border);color:var(--yellow);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:600}
 /* 설정 패널 */
 details.settings{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:14px}
 details.settings>summary{list-style:none;cursor:pointer;padding:14px 16px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
@@ -122,15 +121,10 @@ td.subcell{font-weight:700;white-space:nowrap}
     <h1>황해담 활어 발주 계산기</h1>
     <div class="hbtns no-print">
       <button class="primary" id="btnShare">공유 링크 복사</button>
-      <button id="btnShareView">보기 전용 링크</button>
       <button id="btnReset">초기화</button>
     </div>
   </header>
 
-  <div id="viewBanner" hidden>
-    <span>👁 보기 전용 — 공유받은 화면입니다</span>
-    <button id="btnEdit">내가 수정해보기</button>
-  </div>
 
   <details class="settings no-print" id="settingsPanel" open>
     <summary>⚙️ 설정 (배수 · 인원)</summary>
@@ -238,13 +232,11 @@ function decodeState(str){
 }
 /* ==CALC-END== */
 
-var viewOnly=false;
 
 function hashParams(){ return new URLSearchParams(location.hash.replace(/^#/,'')); }
 
 function loadState(){
   var p=hashParams();
-  viewOnly = p.get('v')==='1';
   var d=p.get('d');
   if(d){ var st=decodeState(d); if(st) return st; }
   try{
@@ -258,14 +250,12 @@ function persist(){
   try{ localStorage.setItem('hwal-state',JSON.stringify(state)); }catch(e){}
   var p=new URLSearchParams();
   p.set('d',encodeState(state));
-  if(viewOnly) p.set('v','1');
   history.replaceState(null,'','#'+p.toString());
 }
 
-function shareUrl(view){
+function shareUrl(){
   var p=new URLSearchParams();
   p.set('d',encodeState(state));
-  if(view) p.set('v','1');
   return location.href.split('#')[0]+'#'+p.toString();
 }
 
@@ -396,9 +386,6 @@ function syncInputs(){
   });
 }
 
-function setDisabled(dis){
-  document.querySelectorAll('input, .mstep, .reduce-btn').forEach(function(el){ el.disabled=dis; });
-}
 
 /* 계산 결과 → 화면 반영 */
 function update(){
@@ -547,22 +534,13 @@ function bindEvents(){
       var all=[0,1,2,3].map(kakaoText).join('\n\n');
       copyText(all,'전체 요일 텍스트 복사됨');
     }
-    else if(el.id==='btnShare') copyText(shareUrl(false),'공유 링크 복사됨');
-    else if(el.id==='btnShareView') copyText(shareUrl(true),'보기 전용 링크 복사됨');
+    else if(el.id==='btnShare') copyText(shareUrl(),'공유 링크 복사됨');
     else if(el.id==='btnReset'){
       if(confirm('모든 값을 기본값으로 되돌릴까요?')){
         state=JSON.parse(JSON.stringify(DEFAULT));
         syncInputs(); update(); persist();
         toast('초기화됨');
       }
-    }
-    else if(el.id==='btnEdit'){
-      viewOnly=false;
-      document.getElementById('viewBanner').hidden=true;
-      setDisabled(false);
-      document.getElementById('settingsPanel').open=true;
-      persist();
-      toast('편집 모드로 전환됨');
     }
   });
 }
@@ -573,11 +551,6 @@ buildUI();
 syncInputs();
 update();
 bindEvents();
-if(viewOnly){
-  document.getElementById('viewBanner').hidden=false;
-  document.getElementById('settingsPanel').open=false;
-  setDisabled(true);
-}
 persist();
 </script>
 </body>
