@@ -79,11 +79,9 @@ th{background:var(--bg);font-weight:600;white-space:nowrap}
 th .mul{display:block;font-size:.75rem;color:var(--accent);font-weight:700}
 td.branch, tr.sumrow td:first-child{font-weight:700;background:var(--bg);white-space:nowrap}
 td .adj{display:block;font-size:.78rem;color:var(--sub);margin-top:2px;white-space:nowrap}
-td .adj.warn{color:var(--red);font-weight:700}
 td input{min-width:64px;text-align:center;padding:6px 4px}
 tr.sumrow td{font-weight:700;background:var(--bg)}
 td.subcell{font-weight:700;white-space:nowrap}
-.salmon-warn{margin:6px 16px 0;font-size:.85rem;color:var(--red);font-weight:600}
 /* 기준 맞추기 / 카톡 */
 .day-tools{padding:12px 16px 16px;display:grid;gap:12px}
 .reduce-box{border:1px dashed var(--border);border-radius:10px;padding:12px;display:none}
@@ -362,7 +360,6 @@ function buildUI(){
     html+='<section class="day" id="day-'+d+'">'+
       '<div class="day-head"><h2>'+DAYS[d]+' 상세 <span id="dhead-'+d+'"></span></h2>'+
       '<button type="button" class="reduce-btn no-print" data-d="'+d+'">⚖️ 기준 맞추기</button></div>'+
-      '<div class="salmon-warn" id="salwarn-'+d+'" hidden></div>'+
       '<div class="tbl-scroll"><table>'+thead+rows+'</table></div>'+
       '<div class="day-tools">'+
       '<div class="reduce-box" id="rbox-'+d+'"></div>'+
@@ -418,16 +415,11 @@ function update(){
 
     document.getElementById('dhead-'+d).textContent='총 '+fmt(c.total)+'kg';
 
-    var salWarnBranches=[];
     for(var b=0;b<4;b++){
       for(var s=0;s<5;s++){
         var el=document.getElementById('adj-'+d+'-'+b+'-'+s);
         if(s===4){
-          var mi=salmonMi(d,b);
-          var bad=Math.abs(mi-Math.round(mi))>1e-9;
-          el.textContent='→ '+fmt(mi)+'미 ('+fmt(adjusted(d,b,4))+'kg)'+(bad?' ⚠':'');
-          el.className='adj'+(bad?' warn':'');
-          if(bad) salWarnBranches.push(BRANCHES[b]+' '+fmt(mi)+'미');
+          el.textContent='→ '+fmt(salmonMi(d,b))+'미 ('+fmt(adjusted(d,b,4))+'kg)';
         }else{
           el.textContent='→ '+fmt(adjusted(d,b,s))+'kg';
         }
@@ -443,12 +435,6 @@ function update(){
       document.getElementById('thm-'+d+'-'+s2).textContent='×'+fmtM(state.m[s2]);
     }
     document.getElementById('dtot-'+d).textContent=fmt(c.total)+'kg';
-
-    var sw=document.getElementById('salwarn-'+d);
-    if(salWarnBranches.length){
-      sw.hidden=false;
-      sw.textContent='⚠ 연어 발주 불가 — '+salWarnBranches.join(', ')+' → 1미 또는 0미로 조정 필요 (배수·기준물량 확인)';
-    }else sw.hidden=true;
 
     document.getElementById('kakao-'+d).textContent=kakaoText(d);
   }
