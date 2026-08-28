@@ -145,6 +145,17 @@ td.subcell{font-weight:700;white-space:nowrap}
     </div>
   </details>
 
+  <details class="settings no-print" id="stockPanel">
+    <summary>📦 재고 입력 (있으면 발주량에서 자동으로 뺌)</summary>
+    <div class="set-body">
+      <div class="set-group">
+        <h3>지점에 남아있는 재고를 적으면 그만큼 발주량에서 빠집니다 · 연어는 '미' 단위 · 비워두면 0</h3>
+        <div class="tbl-scroll"><table id="stockTbl"></table></div>
+        <button type="button" id="btnStockClear" style="margin-top:10px">재고 모두 지우기</button>
+      </div>
+    </div>
+  </details>
+
   <div class="cards" id="cards"></div>
   <div id="days"></div>
   <button class="copy-all no-print" id="btnCopyAll">📋 전체 요일 카톡 텍스트 한번에 복사</button>
@@ -164,9 +175,11 @@ var DEFAULT={
     [[40,100,17,20,3],[35,100,17,20,3],[25,45,12,10,2],[14,27,6,5,1]],
     [[45,110,20,20,3],[40,110,20,20,3],[25,45,15,14,2],[14,27,6,6,1]],
     [[35,60,15,12,2],[35,60,15,12,2],[18,35,8,7,2],[12,22,6,3,1]]
-  ]
+  ],
+  r:[[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]]
 };
 var state=null;
+function emptyR(){ return [[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]]; }
 
 function fmt(x){
   var r=Math.round(x*10)/10;
@@ -174,12 +187,16 @@ function fmt(x){
 }
 function fmtM(x){ return String(+(+x).toFixed(2)); }
 
-function adjusted(d,b,s){
+function stockOf(b,s){ return Math.max(0, +(((state.r||[])[b]||[])[s])||0); }
+function needRaw(d,b,s){
   var base=+state.q[d][b][s]||0, m=+state.m[s]||0;
-  if(s===4) return base*m*(+state.c||0);
   return base*m;
 }
-function salmonMi(d,b){ return (+state.q[d][b][4]||0)*(+state.m[4]||0); }
+function salmonMi(d,b){ return Math.max(0, needRaw(d,b,4)-stockOf(b,4)); }
+function adjusted(d,b,s){
+  if(s===4) return salmonMi(d,b)*(+state.c||0);
+  return Math.max(0, needRaw(d,b,s)-stockOf(b,s));
+}
 
 function calcDay(d){
   var subs=[],spTot=[0,0,0,0,0],total=0,b,s,v,sub;
@@ -210,14 +227,19 @@ function reductionPlan(d){
   var nonSalmon=c.subs[1]-salmonKg;
   if(nonSalmon<=0||c.excess>=nonSalmon) return {type:'impossible',c:c};
   var r=(nonSalmon-c.excess)/nonSalmon;
-  var newBases=state.q[d][1].map(function(v,s){ return s===4? +v : (+v)*r; });
+  var newBases=state.q[d][1].map(function(v,s){
+    if(s===4) return +v;
+    var net=adjusted(d,1,s), m=+state.m[s]||0;
+    if(net<=0||m<=0) return +v;
+    return (net*r+stockOf(1,s))/m;
+  });
   var newSub=nonSalmon*r+salmonKg;
   var rate=c.excess/c.subs[1]*100;
   return {type:'ok',r:r,newBases:newBases,newSub:newSub,rate:rate,c:c};
 }
 
 function encodeState(st){
-  var j=JSON.stringify([st.m,st.c,st.s,st.p,st.q]);
+  var j=JSON.stringify([st.m,st.c,st.s,st.p,st.q,st.r||emptyR()]);
   return btoa(j).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 function decodeState(str){
@@ -225,7 +247,7 @@ function decodeState(str){
     var j=atob(String(str).replace(/-/g,'+').replace(/_/g,'/'));
     var a=JSON.parse(j);
     if(!a||a.length<5||!a[4]||a[4].length!==4) return null;
-    return {m:a[0],c:a[1],s:a[2],p:a[3],q:a[4]};
+    return {m:a[0],c:a[1],s:a[2],p:a[3],q:a[4],r:(a[5]&&a[5].length===4)?a[5]:emptyR()};
   }catch(e){ return null; }
 }
 /* ==CALC-END== */
@@ -239,7 +261,7 @@ function loadState(){
   if(d){ var st=decodeState(d); if(st) return st; }
   try{
     var ls=localStorage.getItem('hwal-state');
-    if(ls){ var a=JSON.parse(ls); if(a&&a.q&&a.q.length===4) return a; }
+    if(ls){ var a=JSON.parse(ls); if(a&&a.q&&a.q.length===4){ if(!a.r||a.r.length!==4) a.r=emptyR(); return a; } }
   }catch(e){}
   return JSON.parse(JSON.stringify(DEFAULT));
 }
@@ -294,6 +316,9 @@ function kakaoText(d){
   lines.push('['+dayDateLabel(d)+' 예상물량 — '+fmt(c.total)+'kg]');
   var crit=SPECIES.map(function(n,s){ return n+' ×'+fmtM(state.m[s]); }).join(' / ');
   lines.push('※ 기준: '+crit+' (1미='+fmtM(state.c)+'kg)');
+  var anyStock=false;
+  for(var bb=0;bb<4;bb++)for(var ss=0;ss<5;ss++) if(stockOf(bb,ss)>0) anyStock=true;
+  if(anyStock) lines.push('※ 지점 재고를 뺀 발주량입니다');
   for(var b=0;b<4;b++){
     var parts=[];
     for(var s=0;s<4;s++) parts.push(SHORT[s]+fmt(adjusted(d,b,s)));
@@ -324,6 +349,16 @@ function buildUI(){
       '<input type="number" class="staff-in" data-d="'+d+'" min="0" step="1"></div>';
   }
   document.getElementById('staffGrid').innerHTML=html;
+
+  var sth='<tr><th>지점</th>';
+  for(s=0;s<5;s++) sth+='<th>'+SPECIES[s]+(s===4?' (미)':' (kg)')+'</th>';
+  sth+='</tr>';
+  for(b=0;b<4;b++){
+    sth+='<tr><td class="branch">'+BRANCHES[b]+'</td>';
+    for(s=0;s<5;s++) sth+='<td><input type="number" class="stock-in" data-b="'+b+'" data-s="'+s+'" min="0" placeholder="0"></td>';
+    sth+='</tr>';
+  }
+  document.getElementById('stockTbl').innerHTML=sth;
 
   html='';
   for(d=0;d<4;d++){
@@ -378,6 +413,10 @@ function syncInputs(){
   document.getElementById('inConv').value=fmtM(state.c);
   document.getElementById('inStd').value=fmtM(state.s);
   document.querySelectorAll('.staff-in').forEach(function(el){ el.value=state.p[+el.dataset.d]; });
+  document.querySelectorAll('.stock-in').forEach(function(el){
+    var v=stockOf(+el.dataset.b,+el.dataset.s);
+    el.value=v>0?fmtM(v):'';
+  });
   document.querySelectorAll('.q-in').forEach(function(el){
     el.value=fmtM(state.q[+el.dataset.d][+el.dataset.b][+el.dataset.s]);
   });
@@ -419,9 +458,9 @@ function update(){
       for(var s=0;s<5;s++){
         var el=document.getElementById('adj-'+d+'-'+b+'-'+s);
         if(s===4){
-          el.textContent='→ '+fmt(salmonMi(d,b))+'미 ('+fmt(adjusted(d,b,4))+'kg)';
+          el.textContent='→ '+fmt(salmonMi(d,b))+'미 ('+fmt(adjusted(d,b,4))+'kg)'+(stockOf(b,4)>0?' 재고'+fmt(stockOf(b,4))+'미 뺌':'');
         }else{
-          el.textContent='→ '+fmt(adjusted(d,b,s))+'kg';
+          el.textContent='→ '+fmt(adjusted(d,b,s))+'kg'+(stockOf(b,s)>0?' (재고'+fmt(stockOf(b,s))+' 뺌)':'');
         }
       }
       document.getElementById('sub-'+d+'-'+b).textContent=fmt(c.subs[b]);
@@ -501,6 +540,7 @@ function bindEvents(){
     else if(el.id==='inStd') onNumInput(el,function(v){ state.s=v; });
     else if(el.classList.contains('staff-in')) onNumInput(el,function(v){ state.p[+el.dataset.d]=Math.floor(v); });
     else if(el.classList.contains('q-in')) onNumInput(el,function(v){ state.q[+el.dataset.d][+el.dataset.b][+el.dataset.s]=v; });
+    else if(el.classList.contains('stock-in')) onNumInput(el,function(v){ if(!state.r) state.r=emptyR(); state.r[+el.dataset.b][+el.dataset.s]=v; });
   });
 
   document.body.addEventListener('click',function(e){
@@ -512,6 +552,7 @@ function bindEvents(){
       state.m[i]=nv;
       syncInputs(); update(); persist();
     }
+    else if(el.id==='btnStockClear'){ state.r=emptyR(); syncInputs(); update(); persist(); toast('재고를 모두 지웠습니다'); }
     else if(el.classList.contains('reduce-btn')) showReduce(+el.dataset.d);
     else if(el.classList.contains('reduce-apply')) applyReduce(+el.dataset.d);
     else if(el.classList.contains('reduce-cancel')) document.getElementById('rbox-'+el.dataset.d).classList.remove('show');
